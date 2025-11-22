@@ -1,0 +1,25 @@
+# PROJECT NORTH STAR
+Build "NEON RUNNER": An infinite, forward-scrolling rail shooter/dodger. The player controls a ship flying into the screen through a procedural retro-3D landscape.
+* **Vibe:** Blade Runner meets Synthwave. Dark rainy atmosphere, neon wireframe structures (pyramids, obelisks) appearing from the horizon.
+* **Core Mechanic:** Avoid collisions while maintaining high speed to increase score.
+
+# TECH STACK
+* **Core:** HTML5 Canvas API (2D Context).
+* **Engine:** Custom "Pseudo-3D" Projection Engine (Vanilla JS).
+    * *Logic:* `ScreenX = WorldX / WorldZ`.
+* **Rendering:** Wireframe Vector Graphics with `globalCompositeOperation = 'lighter'` for neon glow effects.
+* **Input:** Mouse or Arrow Keys for X/Y movement.
+
+# DEVELOPMENT LAWS
+1.  **The Z-Axis Rule:** All objects must spawn at `MAX_Z` (far away) and move towards `Z=0` (camera).
+2.  **Perspective Projection:** Use a central "Vanishing Point." Objects must scale down as they get further away (`scale = focalLength / z`).
+3.  **Performance:** Recycle objects. Once a building passes the camera (`Z < 0`), reset it to `MAX_Z` with new random properties (Object Pooling).
+4.  **Aesthetic:** No solid fills yet. Use `stroke()` with colors like `#00FFFF` (Cyan) and `#FF00FF` (Magenta) against a `#000000` background.
+
+# ACTIVE CONTEXT
+**Sprint 1: The Infinite Grid.**
+* **Goal:** Create the illusion of forward speed.
+* **Current Task:**
+    1.  Setup `Game.js` loop.
+    2.  Implement a "Floor Grid" that moves towards the camera to simulate speed.
+    3.  Render a static wireframe "Horizon Line" to anchor the perspective.
