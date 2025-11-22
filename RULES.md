@@ -17,9 +17,11 @@ Build "NEON RUNNER": An infinite, forward-scrolling rail shooter/dodger. The pla
 4.  **Aesthetic:** No solid fills yet. Use `stroke()` with colors like `#00FFFF` (Cyan) and `#FF00FF` (Magenta) against a `#000000` background.
 
 # ACTIVE CONTEXT
-**Sprint 1: The Infinite Grid.**
-* **Goal:** Create the illusion of forward speed.
+**Sprint 2: The Runner & The Obstacles.**
+* **Goal:** Implement player movement and incoming hazards.
 * **Current Task:**
-    1.  Setup `Game.js` loop.
-    2.  Implement a "Floor Grid" that moves towards the camera to simulate speed.
-    3.  Render a static wireframe "Horizon Line" to anchor the perspective.
+    1.  Create `Player` entity (Wireframe Ship).
+    2.  Implement Input Handling (Arrow Keys).
+    3.  Create `Obstacle` entity (Wireframe Pyramids/Cubes).
+    4.  Implement Obstacle Spawning & Pooling (Spawn at MaxZ, move to Camera).
+    5.  Basic Collision Detection (Game Over state).
