@@ -68,6 +68,13 @@ class Obstacle {
         this.x = (Math.random() - 0.5) * 3000;
         this.y = 100; // On the floor (Same as Player)
         this.size = 100 + Math.random() * 100;
+
+        // Randomize type and color
+        const types = ['pyramid', 'cube', 'obelisk'];
+        this.type = types[Math.floor(Math.random() * types.length)];
+
+        const colors = ['#FF0000', '#00FFFF', '#FF00FF'];
+        this.color = colors[Math.floor(Math.random() * colors.length)];
     }
 
     update() {
@@ -88,30 +95,92 @@ class Obstacle {
 
         const s = this.size * p.scale;
 
-        ctx.strokeStyle = '#FF0000';
+        ctx.strokeStyle = this.color || '#FF0000';
         ctx.lineWidth = 2;
         ctx.beginPath();
 
-        // Pyramid
-        // Base is at y, Tip is at y - height
-        // We need 3D points really, but let's fake it with 2D projection of center
-        // Actually, let's project the tip and base corners for better 3D look
+        if (this.type === 'pyramid') {
+            // Pyramid: Triangle facing camera
+            const tip = this.game.project(this.x, this.y - this.size, this.z);
+            const baseL = this.game.project(this.x - this.size / 2, this.y, this.z - this.size / 2);
+            const baseR = this.game.project(this.x + this.size / 2, this.y, this.z - this.size / 2);
 
-        const tip = this.game.project(this.x, this.y - this.size, this.z);
-        const baseL = this.game.project(this.x - this.size / 2, this.y, this.z - this.size / 2); // Front-ish
-        const baseR = this.game.project(this.x + this.size / 2, this.y, this.z - this.size / 2);
-        // We can't easily do full 3D wireframe without projecting all vertices. 
-        // Let's stick to a simple shape for now: Triangle facing camera
+            if (tip && baseL && baseR) {
+                ctx.moveTo(tip.x, tip.y);
+                ctx.lineTo(baseL.x, baseL.y);
+                ctx.lineTo(baseR.x, baseR.y);
+                ctx.closePath();
+                ctx.stroke();
+            }
+        } else if (this.type === 'cube') {
+            // Cube: Wireframe box
+            const h = this.size;
+            const w = this.size / 2;
 
-        if (tip && baseL && baseR) {
-            ctx.moveTo(tip.x, tip.y);
-            ctx.lineTo(baseL.x, baseL.y);
-            ctx.lineTo(baseR.x, baseR.y);
-            ctx.closePath();
-            ctx.stroke();
+            // Front face corners
+            const tl = this.game.project(this.x - w, this.y - h, this.z);
+            const tr = this.game.project(this.x + w, this.y - h, this.z);
+            const bl = this.game.project(this.x - w, this.y, this.z);
+            const br = this.game.project(this.x + w, this.y, this.z);
+
+            if (tl && tr && bl && br) {
+                // Front face
+                ctx.moveTo(tl.x, tl.y);
+                ctx.lineTo(tr.x, tr.y);
+                ctx.lineTo(br.x, br.y);
+                ctx.lineTo(bl.x, bl.y);
+                ctx.closePath();
+                ctx.stroke();
+
+                // Back face (smaller, further back)
+                const depth = this.size / 2;
+                const tl2 = this.game.project(this.x - w * 0.7, this.y - h * 0.7, this.z + depth);
+                const tr2 = this.game.project(this.x + w * 0.7, this.y - h * 0.7, this.z + depth);
+
+                if (tl2 && tr2) {
+                    ctx.beginPath();
+                    ctx.moveTo(tl.x, tl.y);
+                    ctx.lineTo(tl2.x, tl2.y);
+                    ctx.moveTo(tr.x, tr.y);
+                    ctx.lineTo(tr2.x, tr2.y);
+                    ctx.stroke();
+                }
+            }
+        } else if (this.type === 'obelisk') {
+            // Obelisk: Tall thin rectangle
+            const h = this.size * 1.5;
+            const w = this.size / 4;
+
+            const tl = this.game.project(this.x - w, this.y - h, this.z);
+            const tr = this.game.project(this.x + w, this.y - h, this.z);
+            const bl = this.game.project(this.x - w, this.y, this.z);
+            const br = this.game.project(this.x + w, this.y, this.z);
+
+            if (tl && tr && bl && br) {
+                ctx.moveTo(tl.x, tl.y);
+                ctx.lineTo(tr.x, tr.y);
+                ctx.lineTo(br.x, br.y);
+                ctx.lineTo(bl.x, bl.y);
+                ctx.closePath();
+                ctx.stroke();
+            }
         }
     }
 }
+
+// Configuration Constants
+const CONFIG = {
+    FOCAL_LENGTH: 400,
+    BASE_SPEED: 40,
+    GRID_SPACING: 200,
+    FLOOR_Y: 100,
+    PLAYER_Z: 300,
+    MAX_DRAW_DISTANCE: 2000,
+    OBSTACLE_SPAWN_BASE_CHANCE: 0.05,
+    DIFFICULTY_SCORE_INTERVAL: 500,
+    DIFFICULTY_SPEED_INCREMENT: 5,
+    OBSTACLE_POOL_SIZE: 20
+};
 
 class Game {
     constructor() {
@@ -123,12 +192,13 @@ class Game {
         this.canvas.height = this.height;
 
         // Configuration
-        this.focalLength = 400;
+        this.focalLength = CONFIG.FOCAL_LENGTH;
         this.cx = this.width / 2;
         this.cy = this.height / 2;
-        this.speed = 40; // Faster!
+        this.baseSpeed = CONFIG.BASE_SPEED;
+        this.speed = this.baseSpeed;
         this.gridSize = 4000;
-        this.gridSpacing = 200;
+        this.gridSpacing = CONFIG.GRID_SPACING;
 
         // State
         this.offsetZ = 0;
@@ -136,11 +206,13 @@ class Game {
         this.gameOver = false;
         this.score = 0;
 
+        // High Score (LocalStorage)
+        this.highScore = parseInt(localStorage.getItem('neonRunnerHighScore')) || 0;
+
         // Entities
         this.player = new Player(this);
         this.obstacles = [];
-        this.obstaclePoolSize = 20;
-        for (let i = 0; i < this.obstaclePoolSize; i++) {
+        for (let i = 0; i < CONFIG.OBSTACLE_POOL_SIZE; i++) {
             this.obstacles.push(new Obstacle(this));
         }
 
@@ -160,8 +232,31 @@ class Game {
         this.loop();
     }
 
+    restart() {
+        // Reset game state
+        this.gameOver = false;
+        this.score = 0;
+        this.speed = this.baseSpeed;
+        this.offsetZ = 0;
+
+        // Reset player
+        this.player.x = 0;
+        this.player.targetX = 0;
+
+        // Clear all obstacles
+        this.obstacles.forEach(o => o.active = false);
+
+        // Clear input
+        this.input.keys = {};
+    }
+
     handleKey(e, isDown) {
         this.input.keys[e.code] = isDown;
+
+        // Restart on SPACE when game over
+        if (e.code === 'Space' && isDown && this.gameOver) {
+            this.restart();
+        }
     }
 
     resize() {
@@ -182,8 +277,10 @@ class Game {
     }
 
     spawnObstacle() {
-        // Simple spawn logic: every N frames or random chance
-        if (Math.random() < 0.05) {
+        // Progressive spawn rate: increases with score
+        const spawnChance = CONFIG.OBSTACLE_SPAWN_BASE_CHANCE + (this.score / 10000);
+
+        if (Math.random() < spawnChance) {
             const obs = this.obstacles.find(o => !o.active);
             if (obs) {
                 obs.spawn(2000 + Math.random() * 1000); // Spawn far away
@@ -210,6 +307,13 @@ class Game {
 
                 if (dx < (obs.size / 2 + this.player.width / 2)) {
                     this.gameOver = true;
+
+                    // Update high score
+                    if (this.score > this.highScore) {
+                        this.highScore = this.score;
+                        localStorage.setItem('neonRunnerHighScore', this.highScore);
+                    }
+
                     console.log("HIT!");
                 }
             }
@@ -218,6 +322,9 @@ class Game {
 
     update() {
         if (this.gameOver) return;
+
+        // Progressive Difficulty: Increase speed based on score
+        this.speed = this.baseSpeed + Math.floor(this.score / CONFIG.DIFFICULTY_SCORE_INTERVAL) * CONFIG.DIFFICULTY_SPEED_INCREMENT;
 
         // Move grid
         this.offsetZ -= this.speed;
@@ -243,11 +350,22 @@ class Game {
         this.ctx.globalCompositeOperation = 'lighter';
 
         if (this.gameOver) {
+            this.ctx.globalCompositeOperation = 'source-over';
             this.ctx.fillStyle = '#FF0000';
-            this.ctx.font = '40px Courier New';
-            this.ctx.fillText("GAME OVER", this.cx - 100, this.cy);
-            this.ctx.font = '20px Courier New';
-            this.ctx.fillText("Score: " + this.score, this.cx - 50, this.cy + 40);
+            this.ctx.font = 'bold 48px Courier New';
+            this.ctx.fillText("GAME OVER", this.cx - 140, this.cy - 20);
+
+            this.ctx.fillStyle = '#00FFFF';
+            this.ctx.font = '24px Courier New';
+            this.ctx.fillText("SCORE: " + this.score, this.cx - 70, this.cy + 30);
+
+            this.ctx.fillStyle = '#FF00FF';
+            this.ctx.font = '24px Courier New';
+            this.ctx.fillText("HIGH SCORE: " + this.highScore, this.cx - 110, this.cy + 65);
+
+            this.ctx.fillStyle = '#FFFFFF';
+            this.ctx.font = '18px Courier New';
+            this.ctx.fillText("PRESS SPACE TO RESTART", this.cx - 130, this.cy + 110);
             return;
         }
 
@@ -304,9 +422,29 @@ class Game {
         this.player.draw(this.ctx);
 
         // UI
-        this.ctx.fillStyle = '#FFFFFF';
-        this.ctx.font = '20px Courier New';
+        this.ctx.globalCompositeOperation = 'source-over';
+        this.ctx.fillStyle = '#00FFFF';
+        this.ctx.font = 'bold 20px Courier New';
         this.ctx.fillText("SCORE: " + this.score, 20, 30);
+
+        // High Score (top-right)
+        const highScoreText = "HIGH: " + this.highScore;
+        const textWidth = this.ctx.measureText(highScoreText).width;
+        this.ctx.fillStyle = '#FF00FF';
+        this.ctx.fillText(highScoreText, this.width - textWidth - 20, 30);
+
+        // CRT Scanline Effect
+        this.ctx.globalCompositeOperation = 'source-over';
+        this.ctx.strokeStyle = '#FFFFFF';
+        this.ctx.globalAlpha = 0.05;
+        this.ctx.lineWidth = 1;
+        for (let y = 0; y < this.height; y += 4) {
+            this.ctx.beginPath();
+            this.ctx.moveTo(0, y);
+            this.ctx.lineTo(this.width, y);
+            this.ctx.stroke();
+        }
+        this.ctx.globalAlpha = 1.0;
     }
 
     loop() {
