@@ -18,11 +18,11 @@ Build "NEON RUNNER": An infinite, forward-scrolling rail shooter/dodger. The pla
 5.  **The Flat Earth Rule:** The Player and Obstacles must exist on the exact same Y-plane. The Player cannot move vertically (X-axis only).
 
 # ACTIVE CONTEXT
-**Sprint 2: The Runner & The Obstacles.**
-* **Goal:** Implement player movement and incoming hazards.
-* **Current Task:**
-    1.  Create `Player` entity (Wireframe Ship).
-    2.  Implement Input Handling (Arrow Keys).
-    3.  Create `Obstacle` entity (Wireframe Pyramids/Cubes).
-    4.  Implement Obstacle Spawning & Pooling (Spawn at MaxZ, move to Camera).
-    5.  Basic Collision Detection (Game Over state).
+**Sprint 3: Game Polish & Persistence - COMPLETE.**
+* **Completed:**
+    1.  ✅ Restart mechanism (SPACE key)
+    2.  ✅ High score persistence (LocalStorage)
+    3.  ✅ Progressive difficulty (speed + spawn rate)
+    4.  ✅ Obstacle variety (pyramid, cube, obelisk)
+    5.  ✅ Enhanced UI (neon styling, CRT scanlines)
+* **Status:** Game is fully playable with polished visuals and persistent high scores.
