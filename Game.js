@@ -244,8 +244,12 @@ class Game {
 
     draw() {
         // Clear
+        this.ctx.globalCompositeOperation = 'source-over';
         this.ctx.fillStyle = '#000000';
         this.ctx.fillRect(0, 0, this.width, this.height);
+
+        // Neon Style
+        this.ctx.globalCompositeOperation = 'lighter';
 
         if (this.gameOver) {
             this.ctx.fillStyle = '#FF0000';
@@ -255,9 +259,6 @@ class Game {
             this.ctx.fillText("Score: " + this.score, this.cx - 50, this.cy + 40);
             return;
         }
-
-        // Neon Style
-        this.ctx.globalCompositeOperation = 'lighter';
 
         // 1. Horizon
         this.ctx.lineWidth = 2;
