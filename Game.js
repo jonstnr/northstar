@@ -2,33 +2,26 @@ class Player {
     constructor(game) {
         this.game = game;
         this.x = 0;
-        this.y = 100; // Slightly above floor? Floor is at Y=200. Let's say player is at Y=150.
-        this.z = 100; // Fixed distance from camera
+        this.y = 100; // Fixed floor height relative to camera
+        this.z = 300; // Pushed back to be visible
         this.width = 50;
         this.height = 30;
         this.speed = 15;
         this.targetX = 0;
-        this.targetY = 150;
     }
 
     update(input) {
         // Smooth movement
         if (input.keys['ArrowLeft']) this.targetX -= this.speed;
         if (input.keys['ArrowRight']) this.targetX += this.speed;
-        if (input.keys['ArrowUp']) this.targetY -= this.speed;
-        if (input.keys['ArrowDown']) this.targetY += this.speed;
 
         // Boundaries
         const limitX = 800;
-        const limitYMin = -500; // Ceiling?
-        const limitYMax = 200; // Floor
-
         this.targetX = Math.max(-limitX, Math.min(limitX, this.targetX));
-        this.targetY = Math.max(limitYMin, Math.min(limitYMax, this.targetY));
 
         // Lerp
         this.x += (this.targetX - this.x) * 0.1;
-        this.y += (this.targetY - this.y) * 0.1;
+        // Y is constant
     }
 
     draw(ctx) {
@@ -73,7 +66,7 @@ class Obstacle {
         this.z = z;
         // Random X within grid width
         this.x = (Math.random() - 0.5) * 3000;
-        this.y = 200; // On the floor
+        this.y = 100; // On the floor (Same as Player)
         this.size = 100 + Math.random() * 100;
     }
 
@@ -211,13 +204,11 @@ class Game {
 
             // Check Z depth overlap
             if (Math.abs(obs.z - this.player.z) < hitZ) {
-                // Check X/Y overlap
-                // Simple distance for now
-                const dx = obs.x - this.player.x;
-                const dy = obs.y - this.player.y; // Player Y is 150, Obs Y is 200
-                const dist = Math.sqrt(dx * dx + dy * dy);
+                // Check X overlap
+                const dx = Math.abs(obs.x - this.player.x);
+                // Simple distance for now (assuming same Y)
 
-                if (dist < (obs.size / 2 + this.player.width / 2)) {
+                if (dx < (obs.size / 2 + this.player.width / 2)) {
                     this.gameOver = true;
                     console.log("HIT!");
                 }
@@ -271,7 +262,7 @@ class Game {
         // 2. Grid
         this.ctx.strokeStyle = '#FF00FF';
         const maxZ = 2000;
-        const floorY = 200;
+        const floorY = 100;
 
         // Vertical
         for (let i = -10; i <= 10; i++) {

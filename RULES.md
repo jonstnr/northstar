@@ -15,6 +15,7 @@ Build "NEON RUNNER": An infinite, forward-scrolling rail shooter/dodger. The pla
 2.  **Perspective Projection:** Use a central "Vanishing Point." Objects must scale down as they get further away (`scale = focalLength / z`).
 3.  **Performance:** Recycle objects. Once a building passes the camera (`Z < 0`), reset it to `MAX_Z` with new random properties (Object Pooling).
 4.  **Aesthetic:** No solid fills yet. Use `stroke()` with colors like `#00FFFF` (Cyan) and `#FF00FF` (Magenta) against a `#000000` background.
+5.  **The Flat Earth Rule:** The Player and Obstacles must exist on the exact same Y-plane. The Player cannot move vertically (X-axis only).
 
 # ACTIVE CONTEXT
 **Sprint 2: The Runner & The Obstacles.**
