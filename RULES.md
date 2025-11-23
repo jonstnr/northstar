@@ -1,21 +1,20 @@
 # PROJECT NORTH STAR
-Build "NEON RUNNER": An infinite, forward-scrolling rail shooter/dodger. The player controls a ship flying into the screen through a procedural retro-3D landscape.
-* **Vibe:** Blade Runner meets Synthwave. Dark rainy atmosphere, neon wireframe structures (pyramids, obelisks) appearing from the horizon.
-* **Core Mechanic:** Avoid collisions while maintaining high speed to increase score.
+Build "NORTH STAR (北極星)": A 90s Japanese arcade-style vertical shooter.
+* **Vibe:** Treasure's Radiant Silvergun meets Blade Runner 2049. Neon geometric monuments, hypnotic flow state.
+* **Core Mechanic:** Vertical shooting with pattern-based enemies and obstacle weaving.
 
 # TECH STACK
 * **Core:** HTML5 Canvas API (2D Context).
 * **Engine:** Custom "Pseudo-3D" Projection Engine (Vanilla JS).
-    * *Logic:* `ScreenX = WorldX / WorldZ`.
-* **Rendering:** Wireframe Vector Graphics with `globalCompositeOperation = 'lighter'` for neon glow effects.
-* **Input:** Mouse or Arrow Keys for X/Y movement.
+* **Rendering:** Wireframe Vector Graphics with `globalCompositeOperation = 'lighter'`.
+* **Input:** Keyboard (Arrow Keys + Space).
 
 # DEVELOPMENT LAWS
 1.  **The Z-Axis Rule:** All objects must spawn at `MAX_Z` (far away) and move towards `Z=0` (camera).
-2.  **Perspective Projection:** Use a central "Vanishing Point." Objects must scale down as they get further away (`scale = focalLength / z`).
-3.  **Performance:** Recycle objects. Once a building passes the camera (`Z < 0`), reset it to `MAX_Z` with new random properties (Object Pooling).
-4.  **Aesthetic:** No solid fills yet. Use `stroke()` with colors like `#00FFFF` (Cyan) and `#FF00FF` (Magenta) against a `#000000` background.
-5.  **The Flat Earth Rule:** The Player and Obstacles must exist on the exact same Y-plane. The Player cannot move vertically (X-axis only).
+2.  **The Flat Earth Rule:** The Player and Obstacles must exist on the exact same Y-plane.
+3.  **Flow State Physics:** Movement must be physics-based (acceleration/friction) for "smooth curve" feel.
+4.  **Pattern Mastery:** Enemies and obstacles spawn in learnable patterns, never pure randomness.
+5.  **Aesthetic:** Neon monuments (Obelisks, Pyramids) with bold outlines and pulsing glows.
 
 # ACTIVE CONTEXT
 **Sprint 3: Game Polish & Persistence - COMPLETE.**

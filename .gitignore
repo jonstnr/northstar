@@ -1,0 +1,9 @@
+# macOS system files
+.DS_Store
+
+# Development tools
+sprite_manager.html
+sprite_manager_tool.js
+sprite_selector.html
+sprite_test.html
+ext_app_assets/
