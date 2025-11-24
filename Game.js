@@ -316,6 +316,12 @@ class Game {
             this.obstacles.push(new Obstacle(this));
         }
 
+        // Explosion Pool
+        this.explosions = [];
+        for (let i = 0; i < 20; i++) {
+            this.explosions.push(new Explosion(this));
+        }
+
         // Game State
         this.health = 3;
         this.maxHealth = 3;
@@ -373,8 +379,15 @@ class Game {
         try {
             await this.spriteManager.load('assets/spritesheet.png');
             this.spritesLoaded = true;
+
+            // Load individual sprite images
+            await this.spriteManager.loadIndividualImage('enemy_ship', 'assets/enemy_ship.png');
+            await this.spriteManager.loadIndividualImage('explosion_1', 'assets/explosion_1.png');
+            await this.spriteManager.loadIndividualImage('explosion_2', 'assets/explosion_2.png');
+            await this.spriteManager.loadIndividualImage('explosion_3', 'assets/explosion_3.png');
+            await this.spriteManager.loadIndividualImage('explosion_4', 'assets/explosion_4.png');
         } catch (error) {
-            console.warn('Failed to load sprite sheet, using procedural graphics:', error);
+            console.warn('Failed to load sprites, using procedural graphics:', error);
             this.spritesLoaded = false;
         }
 
@@ -466,6 +479,13 @@ class Game {
         return { x: sx, y: sy, scale: scale };
     }
 
+    spawnExplosion(x, y, z) {
+        const explosion = this.explosions.find(exp => !exp.active);
+        if (explosion) {
+            explosion.spawn(x, y, z);
+        }
+    }
+
     getInactiveEnemy() {
         return this.enemies.find(e => !e.active);
     }
@@ -517,6 +537,10 @@ class Game {
 
                         // Juice
                         this.particles.createExplosion(e.x, e.y, e.z, '#FF00FF');
+
+                        // Spawn sprite explosion
+                        this.spawnExplosion(e.x, e.y, e.z);
+
                         // this.audio.playExplosion(); // OLD
                         this.audio.playEnemyHit(); // NEW: Distinct hit sound
                         this.shake = 5 + this.multiplier;
@@ -644,6 +668,7 @@ class Game {
 
         this.projectiles.forEach(p => p.update());
         this.enemies.forEach(e => e.update());
+        this.explosions.forEach(exp => exp.update());
         this.obstacles.forEach(o => o.update());
         this.particles.update();
         this.starfield.update();
@@ -714,16 +739,19 @@ class Game {
             // Flashing Text
             if (Math.floor(this.globalTimer / 30) % 2 === 0) {
                 this.ctx.fillStyle = '#FFFFFF';
-                this.ctx.font = '20px "Press Start 2P"';
+                this.ctx.font = '20px "Press Start 2P"'; // Fixed size
                 this.ctx.textAlign = 'center';
                 this.ctx.shadowColor = '#00FFFF';
                 this.ctx.shadowBlur = 10;
 
+                // Anchored Y position: 87.4% from top (perfect position at 631x811 aspect ratio)
+                const centerY = this.height * 0.874;
+
                 // Different text based on audio ready state
                 if (!this.audioReady) {
-                    this.ctx.fillText("PRESS SPACE TO START ENGINES", this.cx, this.height - 122);
+                    this.ctx.fillText("PRESS SPACE TO START ENGINES", this.cx, centerY);
                 } else {
-                    this.ctx.fillText("SYSTEMS READY - PRESS SPACE TO START", this.cx, this.height - 122);
+                    this.ctx.fillText("SYSTEMS READY - PRESS SPACE TO START", this.cx, centerY);
                 }
 
                 this.ctx.shadowBlur = 0;
@@ -792,8 +820,12 @@ class Game {
             // Flashing Restart Text
             if (Math.floor(this.globalTimer / 30) % 2 === 0) {
                 this.ctx.fillStyle = '#FFFFFF';
-                this.ctx.font = '20px "Press Start 2P"';
-                this.ctx.fillText("PRESS SPACE TO RESTART", this.cx, this.height - 100); // Kept as is
+                this.ctx.font = '20px "Press Start 2P"'; // Fixed size
+
+                // Anchored Y position: 87.7% from top (based on height - 100 at reference 811px)
+                const restartY = this.height * 0.877;
+
+                this.ctx.fillText("PRESS SPACE TO RESTART", this.cx, restartY);
             }
 
             this.ctx.restore(); // End Shake
@@ -884,6 +916,9 @@ class Game {
 
         // 5. Particles (Rendered last so they appear on top)
         this.particles.draw(this.ctx);
+
+        // 6. Explosions (Sprite-based, render after particles)
+        this.explosions.forEach(exp => exp.draw(this.ctx));
 
         this.ctx.restore(); // End Gameplay Shake
 

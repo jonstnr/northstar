@@ -3,6 +3,7 @@ class SpriteManager {
         this.spriteSheet = null;
         this.loaded = false;
         this.sprites = {};
+        this.individualImages = {}; // For standalone sprite images
 
         // Define sprite coordinates (x, y, width, height)
         // These are estimated and can be refined
@@ -16,6 +17,19 @@ class SpriteManager {
         this.sprites.player_ship = [
             { x: 10, y: 0, w: 100, h: 140 },  // Frame 0: Idle with trail
             { x: 110, y: 0, w: 95, h: 140 }   // Frame 1: Engine thrust with brighter trail
+        ];
+
+        // Enemy Ship Sprite (single frame)
+        this.sprites.enemy_ship = [
+            { x: 0, y: 0, w: 64, h: 64 }  // Single frame
+        ];
+
+        // Explosion Animation (4 frames)
+        this.sprites.explosion = [
+            { x: 0, y: 0, w: 64, h: 64 },  // Frame 0: Small star
+            { x: 0, y: 0, w: 64, h: 64 },  // Frame 1: Medium star
+            { x: 0, y: 0, w: 64, h: 64 },  // Frame 2: Large burst
+            { x: 0, y: 0, w: 64, h: 64 }   // Frame 3: Small star (fade)
         ];
 
         // Future sprites can be added here
@@ -131,5 +145,52 @@ class SpriteManager {
             width: sprite[frame].w,
             height: sprite[frame].h
         };
+    }
+
+    /**
+     * Load an individual sprite image (not from sprite sheet)
+     */
+    loadIndividualImage(name, imagePath) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+
+            img.onload = () => {
+                this.individualImages[name] = img;
+                console.log(`✅ Individual sprite loaded: ${name}`);
+                resolve();
+            };
+
+            img.onerror = (error) => {
+                console.error(`❌ Failed to load individual sprite: ${name}`, error);
+                reject(error);
+            };
+
+            img.src = imagePath;
+        });
+    }
+
+    /**
+     * Draw an individual sprite image
+     */
+    drawIndividualImage(ctx, name, x, y, scale = 1.0, rotation = 0) {
+        const img = this.individualImages[name];
+        if (!img) {
+            console.warn(`Individual image '${name}' not loaded`);
+            return false;
+        }
+
+        ctx.save();
+        ctx.translate(x, y);
+
+        if (rotation !== 0) {
+            ctx.rotate(rotation);
+        }
+
+        const w = img.width * scale;
+        const h = img.height * scale;
+
+        ctx.drawImage(img, -w / 2, -h / 2, w, h);
+        ctx.restore();
+        return true;
     }
 }

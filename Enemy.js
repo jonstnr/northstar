@@ -6,7 +6,7 @@ class Enemy {
         this.y = 0;
         this.z = 0;
         this.type = 'diver'; // diver, weaver, sweeper
-        this.width = 60;
+        this.width = 90; // 1.5x wider for better wing collision (original was 60)
         this.height = 60;
         this.timer = 0;
 
@@ -76,22 +76,54 @@ class Enemy {
 
         const size = this.width * p.scale;
 
-        // Red Circle Visuals
-        ctx.fillStyle = 'rgba(255, 0, 0, 0.65)'; // 65% Opacity Red
-        ctx.strokeStyle = '#FF0000';
-        ctx.lineWidth = 2;
+        // Use sprite if loaded, otherwise fall back to procedural
+        if (this.game.spritesLoaded) {
+            // SPRITE-BASED RENDERING
+            ctx.save();
 
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, size / 2, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
+            // Ensure proper composite mode and 90% opacity
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.globalAlpha = 0.9;
 
-        // Inner Core
-        ctx.fillStyle = '#FFFFFF';
-        ctx.globalAlpha = 0.8;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, size * 0.2, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = 1.0;
+            ctx.translate(p.x, p.y);
+
+            // Apply perspective warp (similar to player ship)
+            ctx.scale(1.0, 0.7); // Slight vertical compression
+
+            // Add contrast filter for visibility
+            ctx.filter = 'contrast(1.5) brightness(1.3)';
+
+            // Draw enemy ship sprite
+            this.game.spriteManager.drawIndividualImage(
+                ctx,
+                'enemy_ship',
+                0, 0, // Draw at origin (already translated)
+                size / 40, // Scale based on size
+                0 // No rotation
+            );
+
+            // Reset filter
+            ctx.filter = 'none';
+            ctx.restore();
+        } else {
+            // PROCEDURAL RENDERING (FALLBACK)
+            // Red Circle Visuals
+            ctx.fillStyle = 'rgba(255, 0, 0, 0.65)'; // 65% Opacity Red
+            ctx.strokeStyle = '#FF0000';
+            ctx.lineWidth = 2;
+
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, size / 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            // Inner Core
+            ctx.fillStyle = '#FFFFFF';
+            ctx.globalAlpha = 0.8;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, size * 0.2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1.0;
+        }
     }
 }
