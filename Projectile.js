@@ -14,8 +14,9 @@ class Projectile {
     spawn(x, y, z) {
         this.active = true;
         this.x = x;
-        this.y = y;
+        this.y = y - 5; // Option B: Raise bullet 5px for better alignment
         this.z = z;
+        this.life = 300; // 5 seconds @ 60fps
     }
 
     update() {
@@ -34,8 +35,9 @@ class Projectile {
         // So projectiles should go AWAY from us (Z increases).
 
         this.z += this.speed;
+        this.life--;
 
-        if (this.z > CONFIG.MAX_DRAW_DISTANCE) {
+        if (this.z > CONFIG.MAX_DRAW_DISTANCE || this.life <= 0) {
             this.active = false;
         }
     }

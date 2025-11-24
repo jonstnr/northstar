@@ -61,6 +61,11 @@ class AudioController {
     }
 
     initEngine() {
+        // Resume context if suspended (Autoplay Policy)
+        if (this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+
         // 1. Pink Noise Source
         this.engineSource = this.ctx.createBufferSource();
         this.engineSource.buffer = this.createPinkNoise();
@@ -140,6 +145,10 @@ class AudioController {
     }
 
     startIdleBeep() {
+        if (this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+
         if (this.idleBeepTimer) return;
 
         const playDoubleBeep = () => {
@@ -343,7 +352,10 @@ class AudioController {
         // Rises by whole tone per combo level (starting from combo 2)
         // Whole tone = 2 semitones = ratio of 1.12246
         const baseFreq = 261.63;
-        const freq = baseFreq * Math.pow(1.12246, (comboCount - 2) * 2);
+        let freq = baseFreq * Math.pow(1.12246, (comboCount - 2) * 2);
+
+        // Clamp to Nyquist limit to prevent warnings
+        if (freq > 22050) freq = 22050;
 
         // Carrier (Bell tone)
         const carrier = this.ctx.createOscillator();
@@ -442,5 +454,58 @@ class AudioController {
         gain.connect(this.masterGain);
         osc.start(t);
         osc.stop(t + 0.3);
+    }
+
+    playLifeGain() {
+        // "Mario Coin" style sound: B5 -> E6 rapid arpeggio
+        const t = this.ctx.currentTime;
+
+        // Note 1: B5 (987.77 Hz)
+        const osc1 = this.ctx.createOscillator();
+        osc1.type = 'square';
+        osc1.frequency.setValueAtTime(987.77, t);
+
+        const gain1 = this.ctx.createGain();
+        gain1.gain.setValueAtTime(0.1, t);
+        gain1.gain.linearRampToValueAtTime(0.1, t + 0.08);
+        gain1.gain.linearRampToValueAtTime(0, t + 0.1);
+
+        osc1.connect(gain1);
+        gain1.connect(this.masterGain);
+
+        osc1.start(t);
+        osc1.stop(t + 0.1);
+
+        // Note 2: E6 (1318.51 Hz)
+        const osc2 = this.ctx.createOscillator();
+        osc2.type = 'square';
+        osc2.frequency.setValueAtTime(1318.51, t + 0.1);
+
+        const gain2 = this.ctx.createGain();
+        gain2.gain.setValueAtTime(0.1, t + 0.1);
+        gain2.gain.linearRampToValueAtTime(0.1, t + 0.35);
+        gain2.gain.linearRampToValueAtTime(0, t + 0.45);
+
+        osc2.connect(gain2);
+        gain2.connect(this.masterGain);
+
+        osc2.start(t + 0.1);
+        osc2.stop(t + 0.45);
+    }
+
+    playGameStart() {
+        // Use HTMLAudioElement directly (simpler, avoids Web Audio conflicts)
+        console.log('playGameStart called');
+
+        const audio = new Audio('assets/game_start.wav');
+        audio.volume = 0.3; // 30% volume
+
+        audio.play()
+            .then(() => {
+                console.log('game_start.wav playback started');
+            })
+            .catch(err => {
+                console.error('Failed to play game_start.wav:', err);
+            });
     }
 }

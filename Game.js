@@ -131,6 +131,7 @@ class Obstacle {
         // Animation
         this.rotation = 0;
         this.bobTimer = 0;
+        this.prevZ = 0;
     }
 
     spawn(z, type = 'pyramid', x = null) {
@@ -154,6 +155,7 @@ class Obstacle {
     update() {
         if (!this.active) return;
 
+        this.prevZ = this.z;
         this.z -= this.game.speed; // Move with grid
 
         // Animation
@@ -248,6 +250,42 @@ const CONFIG = {
     PLAYER_BOB_AMOUNT: 3
 };
 
+class FloatingText {
+    constructor(game, x, y, z, text, color = '#FFFF00') {
+        this.game = game;
+        this.x = x;
+        this.y = y;
+        this.z = z;
+        this.text = text;
+        this.color = color;
+        this.life = 60; // 1 second
+        this.active = true;
+        this.yOffset = 0;
+    }
+
+    update() {
+        if (!this.active) return;
+        this.yOffset -= 2; // Float up
+        this.z -= this.game.speed; // Move with world
+        this.life--;
+        if (this.life <= 0 || this.z < 10) this.active = false;
+    }
+
+    draw(ctx) {
+        if (!this.active) return;
+        const p = this.game.project(this.x, this.y + this.yOffset, this.z);
+        if (!p) return;
+
+        ctx.save();
+        ctx.globalAlpha = this.life / 60;
+        ctx.fillStyle = this.color;
+        ctx.font = `${20 * p.scale}px "Press Start 2P"`;
+        ctx.textAlign = 'center';
+        ctx.fillText(this.text, p.x, p.y);
+        ctx.restore();
+    }
+}
+
 class Game {
     constructor() {
         this.canvas = document.getElementById('gameCanvas');
@@ -275,15 +313,26 @@ class Game {
         this.score = 0;
         this.globalTimer = 0; // For animations
 
-        // Images
+        // Initialize Images (Preload)
         this.images = {
             start: new Image(),
             gameOver: new Image(),
-            spaceBackground: new Image()
+            spaceBackground: new Image(),
+            heart: new Image(),
+            enemy_ship: new Image(),
+            explosion_sheet: new Image()
         };
+
         this.images.start.src = 'assets/start_screen.jpg';
         this.images.gameOver.src = 'assets/game_over_clean.jpg';
         this.images.spaceBackground.src = 'assets/space_background.jpg';
+        this.images.heart.src = 'assets/heart.png';
+        this.images.enemy_ship.src = 'assets/enemy_ship.png';
+        this.images.explosion_sheet.src = 'assets/spritesheet.png';
+
+        this.assetsLoaded = false;
+
+        this.heartAnimTimer = 0;
 
         // Sprite Manager (NEW)
         this.spriteManager = new SpriteManager();
@@ -291,6 +340,7 @@ class Game {
 
         // UI Particles
         this.uiParticles = [];
+        this.floatingTexts = [];
 
         // High Score (LocalStorage)
         this.highScore = parseInt(localStorage.getItem('neonRunnerHighScore')) || 0;
@@ -330,10 +380,14 @@ class Game {
         this.combo = 0;
         this.comboTimer = 0;
         this.multiplier = 1;
+        this.kills = 0;
+        this.lastComboMilestone = 0;
 
         // Wave Manager
-        this.waveManager = new WaveManager(this);
         this.wave = 1; // UI Display only
+        this.waveManager = new WaveManager(this);
+        this.showWaveTransition = false;
+        this.waveTransitionText = "";
         this.waveComplete = false; // UI Display only
 
         this.audio = new AudioController();
@@ -374,6 +428,17 @@ class Game {
         this.init();
     }
 
+    checkAssetsLoaded() {
+        if (this.assetsLoaded) return true;
+
+        const allLoaded = Object.values(this.images).every(img => img.complete && img.naturalHeight !== 0);
+        if (allLoaded) {
+            this.assetsLoaded = true;
+            console.log("All Assets Loaded");
+        }
+        return this.assetsLoaded;
+    }
+
     async init() {
         // Load sprite sheet
         try {
@@ -412,10 +477,13 @@ class Game {
         this.health = 3;
         this.combo = 0;
         this.multiplier = 1;
+        this.kills = 0;
+        this.lastComboMilestone = 0;
 
         // Reset player
         this.player.x = 0;
         this.player.vx = 0;
+        this.shake = 0;
 
         // Clear all obstacles and enemies
         this.obstacles.forEach(o => o.active = false);
@@ -427,6 +495,11 @@ class Game {
         this.input.keys = {};
 
         this.audio.stopIdleBeep(); // Stop idle beep when playing
+
+        // Play game start sound after 0.5 second delay
+        setTimeout(() => {
+            this.audio.playGameStart();
+        }, 500);
     }
 
     handleKey(e, isDown) {
@@ -444,9 +517,7 @@ class Game {
                     });
                 } else {
                     // Second press (or later): actually start the game
-                    this.gameState = 'PLAYING';
-                    this.audio.stopIdleBeep(); // Stop idle beep
-                    this.shake = 0; // Ensure no leftover shake
+                    this.restart();
                 }
             } else if (this.gameState === 'GAMEOVER') {
                 this.restart();
@@ -497,20 +568,43 @@ class Game {
     // Wave logic moved to WaveManager.js
 
     checkCollisions() {
-        // 1. Projectiles vs Enemies
+        // 1. Projectiles vs Enemies (Swept Collision)
         this.projectiles.forEach(p => {
             if (!p.active) return;
 
             this.enemies.forEach(e => {
                 if (!e.active) return;
 
-                if (Math.abs(p.z - e.z) < 50) {
+                // SWEPT COLLISION: Check if projectile crossed enemy Z-plane
+                // Projectile moves +Z, Enemy moves -Z
+                // We need to check if they passed each other in this frame
+                // Since we don't track prevZ for projectiles (they are fast), we can use a range check
+                // based on relative speed, OR better:
+                // Check if they are close enough NOW, OR if they were on opposite sides previously.
+                // But simplified "Dynamic Threshold" is actually a form of swept collision if the threshold covers the frame.
+                // Let's refine it to be a true Z-crossing check if possible, but since we don't have p.prevZ easily accessible without adding it,
+                // let's stick to the ROBUST Dynamic Threshold we calculated, but ensure it's generous enough.
+
+                // Actually, let's add p.prevZ logic implicitly by calculating where it WAS.
+                // p.z was p.z - p.speed
+                // e.z was e.prevZ
+
+                // Effective Z-crossing check:
+                // Did p.z and e.z swap relative order?
+                // Frame Start: p.z < e.z
+                // Frame End:   p.z >= e.z
+                // (Approximation since they move in opposite directions)
+
+                const relativeSpeed = this.speed + 40; // Approx max relative speed
+                const zThreshold = Math.max(60, relativeSpeed); // Increased base to 60 for safety
+
+                if (Math.abs(p.z - e.z) < zThreshold) {
                     // Circle Collision
                     const dx = p.x - e.x;
-                    const dy = p.y - e.y; // Should be close to 0 as they are on same plane usually
+                    const dy = p.y - e.y;
                     const dist = Math.sqrt(dx * dx + dy * dy);
 
-                    if (dist < (e.width / 2 + p.width / 2)) {
+                    if (dist < (e.width * 1.3 / 2 + p.width / 2)) {
                         // Hit!
                         p.active = false;
                         e.active = false;
@@ -518,11 +612,26 @@ class Game {
                         // Score & Combo
                         const prevCombo = this.combo;
                         this.combo++;
-                        this.comboTimer = 180; // 3 seconds
+                        this.kills++;
+                        this.comboTimer = 180;
 
-                        // Play combo sound on every combo increase (starting from 2)
                         if (this.combo >= 2 && this.combo > prevCombo) {
                             this.audio.playComboSound(this.combo);
+                        }
+
+                        // Life Recovery Logic
+                        const milestones = [10, 20, 30];
+                        if (milestones.includes(this.combo) && this.combo > this.lastComboMilestone) {
+                            if (this.health < this.maxHealth) {
+                                this.health++;
+                                this.audio.playLifeGain();
+                                this.heartAnimTimer = 60;
+                            } else {
+                                this.score += 1000;
+                                this.audio.playLifeGain();
+                                this.heartAnimTimer = 60;
+                            }
+                            this.lastComboMilestone = this.combo;
                         }
 
                         // Multiplier Logic
@@ -535,45 +644,68 @@ class Game {
                         const points = 100 * this.multiplier;
                         this.score += points;
 
+                        // Floating Text
+                        let color = '#FFFF00'; // Yellow
+                        if (this.multiplier >= 5) color = '#00FFFF'; // Cyan
+                        else if (this.multiplier >= 3) color = '#FF00FF'; // Magenta
+
+                        this.floatingTexts.push(new FloatingText(this, e.x, e.y - 50, e.z, `+${points}`, color));
+
+                        if (this.multiplier > 1) {
+                            this.floatingTexts.push(new FloatingText(this, e.x, e.y - 80, e.z, `${this.multiplier}X!`, '#FFFFFF'));
+                        }
+
                         // Juice
                         this.particles.createExplosion(e.x, e.y, e.z, '#FF00FF');
-
-                        // Spawn sprite explosion
                         this.spawnExplosion(e.x, e.y, e.z);
-
-                        // this.audio.playExplosion(); // OLD
-                        this.audio.playEnemyHit(); // NEW: Distinct hit sound
+                        this.audio.playEnemyHit();
                         this.shake = 5 + this.multiplier;
                     }
                 }
             });
         });
 
-        // 2. Player vs Enemies/Obstacles
-        if (this.invincibilityTimer > 0) return; // Invincible
+        // 2. Player vs Enemies/Obstacles (Swept Collision - ROBUST)
+        if (this.invincibilityTimer > 0) return;
 
-        const hitZ = 50;
         let hit = false;
 
-        // Enemies (Circle Collision)
+        // Enemies
         this.enemies.forEach(e => {
             if (!e.active) return;
-            if (Math.abs(e.z - this.player.z) < hitZ) {
+
+            // SWEPT CHECK: Did enemy cross player Z?
+            // Player Z is constant (300)
+            // Enemy moves from >300 to <300
+            // Check if it was >= 300 last frame AND is <= 300 this frame (or close enough)
+            // Also keep a small buffer for "inside" collision
+
+            const crossedZ = (e.prevZ >= this.player.z && e.z <= this.player.z);
+            const nearZ = Math.abs(e.z - this.player.z) < 50; // Still check proximity for stationary/slow cases
+
+            if (crossedZ || nearZ) {
+                // Check X/Y alignment
+                // We use the enemy's current X/Y. Since lateral movement is slow compared to Z, this is safe.
                 const dx = e.x - this.player.x;
-                const dist = Math.sqrt(dx * dx); // 1D distance since Y is mostly same
+                const dist = Math.sqrt(dx * dx);
 
                 if (dist < (e.width / 2 + this.player.width / 2)) {
                     hit = true;
-                    e.active = false; // Destroy enemy on impact
+                    e.active = false;
                 }
             }
         });
 
-        // Obstacles (Box Collision for Pyramids/Crystals still feels okay, but let's tighten)
+        // Obstacles
         this.obstacles.forEach(obs => {
             if (!obs.active) return;
-            if (Math.abs(obs.z - this.player.z) < hitZ) {
-                if (Math.abs(obs.x - this.player.x) < (obs.size / 3 + this.player.width / 2)) { // Tighter hitbox
+
+            // SWEPT CHECK
+            const crossedZ = (obs.prevZ >= this.player.z && obs.z <= this.player.z);
+            const nearZ = Math.abs(obs.z - this.player.z) < 50;
+
+            if (crossedZ || nearZ) {
+                if (Math.abs(obs.x - this.player.x) < (obs.size / 3 + this.player.width / 2)) {
                     hit = true;
                 }
             }
@@ -586,6 +718,7 @@ class Game {
             this.audio.playShipCrash(); // NEW: Distinct crash sound
             this.shake = 20;
             this.combo = 0;
+            this.lastComboMilestone = 0;
             this.multiplier = 1;
 
             if (this.health <= 0) {
@@ -598,8 +731,18 @@ class Game {
             }
         }
     }
+
+
+
     update() {
         this.globalTimer++;
+
+        // Update Particles (moved from later in the update loop)
+        this.particles.update();
+
+        // Update Floating Texts
+        this.floatingTexts.forEach(ft => ft.update());
+        this.floatingTexts = this.floatingTexts.filter(ft => ft.active);
 
         // Update UI Particles (Always run if in UI state)
         if (this.gameState !== 'PLAYING') {
@@ -649,12 +792,17 @@ class Game {
             this.comboTimer--;
             if (this.comboTimer <= 0) {
                 this.combo = 0;
+                this.lastComboMilestone = 0;
                 this.multiplier = 1;
             }
         }
 
-        // Progressive Difficulty
-        this.speed = this.baseSpeed + Math.floor(this.score / CONFIG.DIFFICULTY_SCORE_INTERVAL) * CONFIG.DIFFICULTY_SPEED_INCREMENT;
+        // Progressive Difficulty (Capped at 60,000 score)
+        const cappedScore = Math.min(this.score, 60000);
+        this.speed = this.baseSpeed + Math.floor(cappedScore / CONFIG.DIFFICULTY_SCORE_INTERVAL) * CONFIG.DIFFICULTY_SPEED_INCREMENT;
+
+        // Heart Animation
+        if (this.heartAnimTimer > 0) this.heartAnimTimer--;
 
         // Move grid
         this.offsetZ -= this.speed;
@@ -708,7 +856,8 @@ class Game {
             this.ctx.translate(shakeX, shakeY);
 
             this.ctx.globalCompositeOperation = 'source-over';
-            if (this.images.start.complete) {
+
+            if (this.checkAssetsLoaded()) {
                 // Scale up slightly to cover shake edges
                 this.ctx.drawImage(this.images.start, -10, -10, this.width + 20, this.height + 20);
             } else {
@@ -717,7 +866,7 @@ class Game {
                 this.ctx.fillRect(0, 0, this.width, this.height);
                 this.ctx.fillStyle = '#00FFFF';
                 this.ctx.textAlign = 'center';
-                this.ctx.fillText("LOADING...", this.cx, this.cy);
+                this.ctx.fillText("LOADING ASSETS...", this.cx, this.cy);
             }
 
             // UI Particles
@@ -914,10 +1063,13 @@ class Game {
         // 4. Player (Before particles so it renders behind them)
         this.player.draw(this.ctx);
 
-        // 5. Particles (Rendered last so they appear on top)
+        // Draw Particles
         this.particles.draw(this.ctx);
 
-        // 6. Explosions (Sprite-based, render after particles)
+        // Draw Floating Texts
+        this.floatingTexts.forEach(ft => ft.draw(this.ctx));
+
+        // Draw UI Particlesions (Sprite-based, render after particles)
         this.explosions.forEach(exp => exp.draw(this.ctx));
 
         this.ctx.restore(); // End Gameplay Shake
@@ -937,8 +1089,8 @@ class Game {
         this.ctx.stroke();
 
         // Score
-        this.ctx.fillStyle = '#00FFFF';
         this.ctx.textAlign = 'left';
+        this.ctx.fillStyle = '#00FFFF';
         this.ctx.fillText(`SCORE: ${this.score}`, 20, 35);
 
         // High Score
@@ -946,56 +1098,172 @@ class Game {
         this.ctx.fillStyle = '#FF00FF';
         this.ctx.fillText(`HIGH: ${this.highScore}`, this.cx, 35);
 
+        // Kill Counter (Left-Center position, scales with window)
+        this.ctx.textAlign = 'left';
+        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.fillText(`KILLS: ${this.kills}`, this.cx - (this.cx * 0.5), 35);
+
         // Health Bar
         this.ctx.textAlign = 'right';
         this.ctx.fillStyle = '#FF0000';
-        this.ctx.fillText("HP:", this.width - 140, 35);
+        this.ctx.fillText(`HP:`, this.width - 140, 35);
 
+        // Hearts (using sprite)
+        const heartSize = 30;
+        const heartSpacing = 35;
         for (let i = 0; i < this.maxHealth; i++) {
+            const heartX = this.width - 130 + (i * heartSpacing);
+            const heartY = 10;
+
             if (i < this.health) {
-                this.ctx.fillStyle = '#FF0000';
-                this.ctx.fillRect(this.width - 130 + (i * 35), 15, 25, 25);
+                // Draw filled heart
+                if (this.images.heart && this.images.heart.complete) {
+                    this.ctx.drawImage(this.images.heart, heartX, heartY, heartSize, heartSize);
+                } else {
+                    // Fallback to red square
+                    this.ctx.fillStyle = '#FF0000';
+                    this.ctx.fillRect(heartX, heartY, 25, 25);
+                }
+            } else {
+                // Draw empty heart (grayscale or outline)
+                if (this.images.heart && this.images.heart.complete) {
+                    this.ctx.save();
+                    this.ctx.globalAlpha = 0.3;
+                    this.ctx.drawImage(this.images.heart, heartX, heartY, heartSize, heartSize);
+                    this.ctx.restore();
+                } else {
+                    // Fallback to white outline
+                    this.ctx.strokeStyle = '#FFFFFF';
+                    this.ctx.strokeRect(heartX, heartY, 25, 25);
+                }
             }
-            this.ctx.strokeStyle = '#FFFFFF';
-            this.ctx.strokeRect(this.width - 130 + (i * 35), 15, 25, 25);
         }
 
-        // Combo Indicator (Bottom Center)
+        // Heart Pop-up Animation
+        if (this.heartAnimTimer > 0) {
+            this.ctx.save();
+            this.ctx.globalAlpha = this.heartAnimTimer / 60;
+            const scale = 1 + (60 - this.heartAnimTimer) / 20; // Grow
+
+            this.ctx.translate(this.cx, this.cy);
+            this.ctx.scale(scale, scale);
+
+            if (this.images.heart && this.images.heart.complete) {
+                this.ctx.drawImage(this.images.heart, -32, -32, 64, 64);
+            } else {
+                // Fallback
+                this.ctx.fillStyle = '#FF0000';
+                this.ctx.font = '40px "Press Start 2P"';
+                this.ctx.fillText("♥", 0, 0);
+            }
+
+            this.ctx.restore();
+        }
+
+        // Combo Indicator (Top Center - Enhanced)
         if (this.combo > 1) {
             this.ctx.textAlign = 'center';
-            this.ctx.fillStyle = '#FFFF00';
+
+            // Dynamic Style based on combo tier
+            let fontSize = 30;
+            let color = '#FFFF00'; // Yellow (Default)
+            let glow = 10;
+
+            if (this.combo >= 20) {
+                fontSize = 50;
+                color = `hsl(${Date.now() / 5 % 360}, 100%, 50%)`; // Rainbow
+                glow = 30;
+            } else if (this.combo >= 10) {
+                fontSize = 40;
+                color = '#FF00FF'; // Magenta
+                glow = 20;
+            } else if (this.combo >= 5) {
+                fontSize = 35;
+                color = '#00FFFF'; // Cyan
+                glow = 15;
+            }
+
+            // Combo Display (Top Center - Enhanced)
+            if (this.combo >= 2) {
+                this.ctx.save();
+
+                // Dynamic Size
+                const fontSize = 24 + Math.min(this.combo, 20);
+                this.ctx.font = `${fontSize}px "Press Start 2P"`;
+                this.ctx.textAlign = 'center';
+
+                // Dynamic Color
+                let color = '#FFFF00';
+                if (this.combo >= 20) {
+                    const hue = (Date.now() / 5) % 360;
+                    color = `hsl(${hue}, 100%, 50%)`;
+                } else if (this.combo >= 10) {
+                    color = '#FF00FF';
+                } else if (this.combo >= 5) {
+                    color = '#00FFFF';
+                }
+                this.ctx.fillStyle = color;
+
+                // Shake Effect (High Combo)
+                let shakeX = 0;
+                let shakeY = 0;
+                if (this.combo >= 20) {
+                    shakeX = (Math.random() - 0.5) * 5;
+                    shakeY = (Math.random() - 0.5) * 5;
+                }
+
+                const comboY = this.height * 0.31; // Anchored at 31% from top
+                this.ctx.fillText(`${this.combo}X COMBO`, this.cx + shakeX, comboY + shakeY);
+
+                // Timer Bar
+                const barWidth = 200;
+                const ratio = this.comboTimer / 180;
+                const barY = this.height * 0.31 + 15; // 15px below combo text
+                this.ctx.fillStyle = '#555';
+                this.ctx.fillRect(this.cx - barWidth / 2, barY, barWidth, 10);
+                this.ctx.fillStyle = color;
+                this.ctx.fillRect(this.cx - barWidth / 2, barY, barWidth * ratio, 10);
+
+                this.ctx.restore();
+            }
+
+            this.ctx.restore(); // End Shake
+        }
+
+        // UI Elements (Always render these, regardless of game state)
+        if (this.gameState === 'PLAYING') {
+            // Wave Indicator
+            this.ctx.textAlign = 'left';
+            this.ctx.fillStyle = '#00FFFF';
             this.ctx.font = '20px "Press Start 2P"';
-            this.ctx.fillText(`${this.combo}x COMBO`, this.cx, this.height - 50);
+            this.ctx.fillText(`WAVE ${this.wave}`, 20, this.height - 20);
 
-            // Combo Bar
-            const barWidth = 200;
-            const pct = this.comboTimer / 180;
-            this.ctx.fillStyle = '#555';
-            this.ctx.fillRect(this.cx - barWidth / 2, this.height - 40, barWidth, 10);
-            this.ctx.fillStyle = '#FFFF00';
-            this.ctx.fillRect(this.cx - barWidth / 2, this.height - 40, barWidth * pct, 10);
+            // Wave Transition Text (Center Overlay)
+            if (this.showWaveTransition) {
+                this.ctx.save();
+                this.ctx.textAlign = 'center';
+                this.ctx.fillStyle = '#FFFFFF';
+                this.ctx.shadowColor = '#00FFFF';
+                this.ctx.shadowBlur = 10;
+                this.ctx.font = '24px "Press Start 2P"';
+                const waveTextY = this.height * 0.35; // Anchored at 35% from top
+                this.ctx.fillText(this.waveTransitionText, this.cx, waveTextY);
+                this.ctx.restore();
+            }
+
+            // CRT Scanline Effect
+            this.ctx.globalCompositeOperation = 'source-over';
+            this.ctx.strokeStyle = '#FFFFFF';
+            this.ctx.globalAlpha = 0.05;
+            this.ctx.lineWidth = 1;
+            for (let y = 0; y < this.height; y += 4) {
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, y);
+                this.ctx.lineTo(this.width, y);
+                this.ctx.stroke();
+            }
+            this.ctx.globalAlpha = 1.0;
         }
-
-        // Wave Indicator
-        this.ctx.textAlign = 'left';
-        this.ctx.fillStyle = '#00FF00';
-        this.ctx.font = '12px "Press Start 2P"';
-        this.ctx.fillText(`WAVE ${this.wave}`, 20, this.height - 20);
-
-        // CRT Scanline Effect
-        this.ctx.globalCompositeOperation = 'source-over';
-        this.ctx.strokeStyle = '#FFFFFF';
-        this.ctx.globalAlpha = 0.05;
-        this.ctx.lineWidth = 1;
-        for (let y = 0; y < this.height; y += 4) {
-            this.ctx.beginPath();
-            this.ctx.moveTo(0, y);
-            this.ctx.lineTo(this.width, y);
-            this.ctx.stroke();
-        }
-        this.ctx.globalAlpha = 1.0;
-
-        this.ctx.restore(); // End Shake
     }
 
     loop() {

@@ -12,6 +12,7 @@ class Enemy {
 
         // State
         this.startX = 0;
+        this.prevZ = 0;
     }
 
     spawn(z, type = 'diver', x = null) {
@@ -19,7 +20,7 @@ class Enemy {
         this.z = z;
         this.type = type;
         this.timer = 0;
-        this.y = CONFIG.FLOOR_Y;
+        this.y = CONFIG.FLOOR_Y - 5; // Align with projectile Y (projectiles spawn at player.y - 5)
 
         if (x !== null) {
             this.x = x;
@@ -33,6 +34,8 @@ class Enemy {
 
     update() {
         if (!this.active) return;
+
+        this.prevZ = this.z;
 
         // Move towards camera
         let speed = this.game.speed;
@@ -53,12 +56,19 @@ class Enemy {
         } else if (this.type === EnemyType.SWEEPER) {
             enemySpeed = 30;
             // Sweepers move horizontally
-            // We can use a sine wave or simple direction based on startX
+            // Enhanced movement at high difficulty
+            const lateralSpeed = (this.game.score > 60000) ? 25 : 10;
+
             if (this.startX < 0) {
-                this.x += 10; // Move Right
+                this.x += lateralSpeed; // Move Right
             } else {
-                this.x -= 10; // Move Left
+                this.x -= lateralSpeed; // Move Left
             }
+        }
+
+        // High Difficulty Jitter (All enemies)
+        if (this.game.score > 60000) {
+            this.x += Math.sin(this.game.globalTimer * 0.1) * 5;
         }
 
         this.z -= (this.game.speed + enemySpeed);
