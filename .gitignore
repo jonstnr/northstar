@@ -7,3 +7,5 @@ sprite_manager_tool.js
 sprite_selector.html
 sprite_test.html
 ext_app_assets/
+extract_frames.py
+extract_frames_transparent.py

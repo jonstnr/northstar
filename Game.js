@@ -10,6 +10,9 @@ class Player {
         // Physics
         this.vx = 0;
         this.bobTimer = 0;
+
+        // Visibility (for explosion animation)
+        this.visible = true;
     }
 
     update(input) {
@@ -43,6 +46,9 @@ class Player {
     }
 
     draw(ctx) {
+        // Don't draw if invisible (during explosion animation)
+        if (!this.visible) return;
+
         const p = this.game.project(this.x, this.y, this.z);
         if (!p) return;
 
@@ -372,6 +378,13 @@ class Game {
             this.explosions.push(new Explosion(this));
         }
 
+        // Ship Explosion Pool (for player collision)
+        this.shipExplosions = [];
+        for (let i = 0; i < 3; i++) {
+            this.shipExplosions.push(new ShipExplosion(this));
+        }
+        this.shipExplosionLoaded = false;
+
         // Game State
         this.health = 3;
         this.maxHealth = 3;
@@ -451,6 +464,15 @@ class Game {
             await this.spriteManager.loadIndividualImage('explosion_2', 'assets/explosion_2.png');
             await this.spriteManager.loadIndividualImage('explosion_3', 'assets/explosion_3.png');
             await this.spriteManager.loadIndividualImage('explosion_4', 'assets/explosion_4.png');
+
+            // Load ship explosion frames (player collision animation)
+            await this.spriteManager.loadIndividualImage('ship_explosion_1', 'assets/ship_explosion/frame_01.png');
+            await this.spriteManager.loadIndividualImage('ship_explosion_2', 'assets/ship_explosion/frame_02.png');
+            await this.spriteManager.loadIndividualImage('ship_explosion_3', 'assets/ship_explosion/frame_03.png');
+            await this.spriteManager.loadIndividualImage('ship_explosion_4', 'assets/ship_explosion/frame_04.png');
+            await this.spriteManager.loadIndividualImage('ship_explosion_5', 'assets/ship_explosion/frame_05.png');
+            await this.spriteManager.loadIndividualImage('ship_explosion_6', 'assets/ship_explosion/frame_06.png');
+            this.shipExplosionLoaded = true;
         } catch (error) {
             console.warn('Failed to load sprites, using procedural graphics:', error);
             this.spritesLoaded = false;
@@ -483,12 +505,15 @@ class Game {
         // Reset player
         this.player.x = 0;
         this.player.vx = 0;
+        this.player.visible = true; // Ensure ship is visible on restart
         this.shake = 0;
 
         // Clear all obstacles and enemies
         this.obstacles.forEach(o => o.active = false);
         this.enemies.forEach(e => e.active = false);
         this.projectiles.forEach(p => p.active = false);
+        this.explosions.forEach(exp => exp.active = false);
+        this.shipExplosions.forEach(exp => exp.active = false);
         this.particles.particles = [];
 
         // Clear input
@@ -505,7 +530,12 @@ class Game {
     handleKey(e, isDown) {
         this.input.keys[e.code] = isDown;
 
-        // Restart on SPACE when game over
+        // Restart on ENTER when game over
+        if (e.code === 'Enter' && isDown && this.gameState === 'GAMEOVER') {
+            this.restart();
+        }
+
+        // Start game on SPACE
         if (e.code === 'Space' && isDown) {
             if (this.gameState === 'START') {
                 // Check if audio context needs to be unlocked first
@@ -519,9 +549,7 @@ class Game {
                     // Second press (or later): actually start the game
                     this.restart();
                 }
-            } else if (this.gameState === 'GAMEOVER') {
-                this.restart();
-            } else {
+            } else if (this.gameState === 'PLAYING') {
                 // Shoot
                 const p = this.projectiles.find(p => !p.active);
                 if (p) {
@@ -554,6 +582,13 @@ class Game {
         const explosion = this.explosions.find(exp => !exp.active);
         if (explosion) {
             explosion.spawn(x, y, z);
+        }
+    }
+
+    spawnShipExplosion(x, y, z, scale = 1.0) {
+        const explosion = this.shipExplosions.find(exp => !exp.active);
+        if (explosion) {
+            explosion.spawn(x, y, z, scale);
         }
     }
 
@@ -714,6 +749,19 @@ class Game {
         if (hit) {
             this.health--;
             this.invincibilityTimer = 120; // 2 seconds invincibility
+
+            // Hide player ship during explosion animation
+            this.player.visible = false;
+
+            // Spawn ship explosion at player position
+            this.spawnShipExplosion(this.player.x, this.player.y, this.player.z, 1.5);
+
+            // Restore player visibility after explosion animation completes
+            // Explosion is 6 frames * 5 ticks per frame = 30 ticks
+            setTimeout(() => {
+                this.player.visible = true;
+            }, 30 * (1000 / 60)); // 30 frames at 60fps
+
             // this.audio.playExplosion(); // OLD
             this.audio.playShipCrash(); // NEW: Distinct crash sound
             this.shake = 20;
@@ -817,6 +865,7 @@ class Game {
         this.projectiles.forEach(p => p.update());
         this.enemies.forEach(e => e.update());
         this.explosions.forEach(exp => exp.update());
+        this.shipExplosions.forEach(exp => exp.update());
         this.obstacles.forEach(o => o.update());
         this.particles.update();
         this.starfield.update();
@@ -974,7 +1023,7 @@ class Game {
                 // Anchored Y position: 87.7% from top (based on height - 100 at reference 811px)
                 const restartY = this.height * 0.877;
 
-                this.ctx.fillText("PRESS SPACE TO RESTART", this.cx, restartY);
+                this.ctx.fillText("PRESS ENTER TO RESTART", this.cx, restartY);
             }
 
             this.ctx.restore(); // End Shake
@@ -1071,6 +1120,9 @@ class Game {
 
         // Draw UI Particlesions (Sprite-based, render after particles)
         this.explosions.forEach(exp => exp.draw(this.ctx));
+
+        // Draw Ship Explosions (player collision animation)
+        this.shipExplosions.forEach(exp => exp.draw(this.ctx));
 
         this.ctx.restore(); // End Gameplay Shake
 
