@@ -770,8 +770,12 @@ class Game {
             this.multiplier = 1;
 
             if (this.health <= 0) {
-                this.gameState = 'GAMEOVER';
-                this.audio.startIdleBeep(); // Start idle beep on death
+                // Delay game over screen to show full explosion animation
+                setTimeout(() => {
+                    this.gameState = 'GAMEOVER';
+                    this.audio.startIdleBeep(); // Start idle beep on death
+                }, 500); // 0.5 second delay
+
                 if (this.score > this.highScore) {
                     this.highScore = this.score;
                     localStorage.setItem('neonRunnerHighScore', this.highScore);
